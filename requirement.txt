@@ -1,8 +1,0 @@
-Flask
-tensorflow==2.11.0
-numpy
-pandas
-librosa
-scikit-learn
-joblib
-gunicorn
