@@ -3,6 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 import joblib
 from model.extractor import load_audio, extract_features
@@ -14,7 +15,7 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 model = load_model('model/deepfake_detection_model.h5',
-                   custom_objects={'mse': tensorflow.keras.losses.MeanSquaredError()})
+                   custom_objects={'mse': tf.keras.losses.MeanSquaredError()})
 scaler = joblib.load("model/scaler.pkl")
 threshold = float(np.load("model/threshold.npy"))
 
