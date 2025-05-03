@@ -6,7 +6,7 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import joblib
-from extractor import load_audio, extract_features
+from model.extractor import load_audio, extract_features
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
