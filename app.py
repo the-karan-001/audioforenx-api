@@ -6,7 +6,7 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import joblib
-from model.extractor import load_audio, extract_features
+from extractor import load_audio, extract_features
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -14,7 +14,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Load model, scaler, threshold
 model = load_model('model/deepfake_detection_model.h5',
                    custom_objects={'mse': tf.keras.losses.MeanSquaredError()})
 scaler = joblib.load("model/scaler.pkl")
@@ -31,6 +30,10 @@ def predict():
 
     y = load_audio(path)
     features = extract_features(y)
+    
+    # Debugging: Check the number of extracted features
+    print("Number of extracted features:", len(features))  # Should be 15 after adjustment
+
     df = pd.DataFrame([features])
     X_scaled = scaler.transform(df)
 
@@ -44,8 +47,3 @@ def predict():
         "confidence": round(confidence, 4),
         "features": {k: round(v, 3) for k, v in features.items()}
     })
-
-# For Render deployment
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
