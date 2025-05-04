@@ -60,6 +60,10 @@ def cleanup_after_request(response):
     gc.collect()
     return response
 
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({"status": "Deepfake Detection API", "endpoints": ["/diagnostics", "/predict"]})
+
 @app.route("/diagnostics", methods=["GET"])
 def diagnostics():
     import sys
@@ -117,6 +121,10 @@ def predict():
                 
             logger.info("Extracting features")
             features = extract_features(y, sr=sr)
+            
+            if not features:
+                logger.warning("Feature extraction failed, using default features")
+                features = {name: 0.0 for name in feature_names}
             
             # Initialize DataFrame with all expected features
             feature_df = pd.DataFrame(0.0, index=[0], columns=feature_names)
