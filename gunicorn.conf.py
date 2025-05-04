@@ -7,3 +7,4 @@ max_requests_jitter = 10
 loglevel = "info"
 accesslog = "-"
 errorlog = "-"
+worker_tmp_dir = "/tmp"
