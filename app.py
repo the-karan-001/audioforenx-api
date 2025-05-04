@@ -8,8 +8,7 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 import joblib
 import traceback
-from model.extractor import load_audio, extract_features
-import librosa
+from model.extractor import load_audio, extract_features, DEFAULT_SR
 
 # Set environment variable to disable Numba JIT
 os.environ['NUMBA_DISABLE_JIT'] = '1'
@@ -29,9 +28,6 @@ tf.config.threading.set_intra_op_parallelism_threads(1)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Define the target sample rate that was used during training
-TARGET_SAMPLE_RATE = 16000  # Adjust this to match your training sample rate
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -62,6 +58,50 @@ def cleanup_after_request(response):
     gc.collect()
     return response
 
+@app.route("/diagnostics", methods=["GET"])
+def diagnostics():
+    """Return version information for debugging"""
+    import sys
+    import pandas
+    
+    versions = {
+        "python": sys.version,
+        "numpy": np.__version__,
+        "pandas": pandas.__version__,
+        "tensorflow": tf.__version__
+    }
+    
+    try:
+        import librosa
+        versions["librosa"] = librosa.__version__
+    except:
+        versions["librosa"] = "not installed"
+        
+    try:
+        import numba
+        versions["numba"] = numba.__version__
+    except:
+        versions["numba"] = "not installed"
+    
+    # Check if model is loaded
+    versions["model_loaded"] = model is not None
+    
+    # Check feature names
+    if feature_names is not None:
+        versions["feature_count"] = len(feature_names)
+        # Show a few example feature names
+        versions["feature_examples"] = list(feature_names[:5])
+        # Show feature groups
+        feature_groups = {}
+        for feat in feature_names:
+            prefix = feat.split('_')[0] if '_' in feat else feat
+            if prefix not in feature_groups:
+                feature_groups[prefix] = 0
+            feature_groups[prefix] += 1
+        versions["feature_groups"] = feature_groups
+    
+    return jsonify(versions)
+
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
@@ -83,20 +123,14 @@ def predict():
         file.save(path)
         
         try:
-            # Load and process audio with resampling to match training sample rate
-            y, sr = librosa.load(path, sr=None)  # Load with original sample rate
-            print(f"Original sample rate: {sr}")
+            # Load audio with original sample rate
+            y, sr = load_audio(path)
             
             if y is None or len(y) == 0:
                 return jsonify({"error": "Failed to load audio - empty signal"}), 400
                 
-            # Resample to target sample rate
-            if sr != TARGET_SAMPLE_RATE:
-                print(f"Resampling from {sr} to {TARGET_SAMPLE_RATE}")
-                y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SAMPLE_RATE)
-            
-            # Extract features
-            features = extract_features(y, sr=TARGET_SAMPLE_RATE)
+            # Extract features with sample rate information
+            features = extract_features(y, sr=sr)
             
             # Ensure features match what the scaler expects
             feature_df = pd.DataFrame([features])
@@ -106,7 +140,7 @@ def predict():
             extra_features = set(feature_df.columns) - set(feature_names)
             
             if missing_features:
-                print(f"Adding {len(missing_features)} missing features")
+                print(f"Adding {len(missing_features)} missing features: {missing_features}")
                 for feat in missing_features:
                     feature_df[feat] = 0.0  # Add missing features with default values
                     
@@ -143,7 +177,7 @@ def predict():
                 "threshold": float(threshold),
                 "features_count": len(feature_names),
                 "sample_rate_original": sr,
-                "sample_rate_used": TARGET_SAMPLE_RATE
+                "sample_rate_used": DEFAULT_SR
             })
             
         except Exception as e:
