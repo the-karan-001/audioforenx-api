@@ -6,4 +6,5 @@ librosa
 scikit-learn
 joblib
 gunicorn
+psutil
 
