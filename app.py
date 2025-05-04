@@ -9,6 +9,7 @@ from tensorflow.keras.models import load_model
 import joblib
 import traceback
 from model.extractor import load_audio, extract_features
+import librosa
 
 # Set environment variable to disable Numba JIT
 os.environ['NUMBA_DISABLE_JIT'] = '1'
@@ -29,6 +30,9 @@ tf.config.threading.set_intra_op_parallelism_threads(1)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Define the target sample rate that was used during training
+TARGET_SAMPLE_RATE = 16000  # Adjust this to match your training sample rate
+
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -39,6 +43,10 @@ try:
                        custom_objects={'mse': tf.keras.losses.MeanSquaredError()})
     scaler = joblib.load("model/scaler.pkl")
     threshold = float(np.load("model/threshold.npy"))
+    
+    # Store the feature names from the scaler for validation
+    feature_names = scaler.feature_names_in_
+    print(f"Model expects {len(feature_names)} features")
     print("Models loaded successfully")
 except Exception as e:
     print(f"Error loading models: {e}")
@@ -46,6 +54,7 @@ except Exception as e:
     model = None
     scaler = None
     threshold = None
+    feature_names = None
 
 @app.after_request
 def cleanup_after_request(response):
@@ -74,23 +83,42 @@ def predict():
         file.save(path)
         
         try:
-            # Load and process audio
-            y = load_audio(path)
+            # Load and process audio with resampling to match training sample rate
+            y, sr = librosa.load(path, sr=None)  # Load with original sample rate
+            print(f"Original sample rate: {sr}")
             
             if y is None or len(y) == 0:
                 return jsonify({"error": "Failed to load audio - empty signal"}), 400
                 
+            # Resample to target sample rate
+            if sr != TARGET_SAMPLE_RATE:
+                print(f"Resampling from {sr} to {TARGET_SAMPLE_RATE}")
+                y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SAMPLE_RATE)
+            
             # Extract features
-            features = extract_features(y)
+            features = extract_features(y, sr=TARGET_SAMPLE_RATE)
             
-            # Debugging: Check the number of extracted features
-            print(f"Number of extracted features: {len(features)}")
+            # Ensure features match what the scaler expects
+            feature_df = pd.DataFrame([features])
             
-            # Create DataFrame
-            df = pd.DataFrame([features])
+            # Check and fix feature alignment
+            missing_features = set(feature_names) - set(feature_df.columns)
+            extra_features = set(feature_df.columns) - set(feature_names)
+            
+            if missing_features:
+                print(f"Adding {len(missing_features)} missing features")
+                for feat in missing_features:
+                    feature_df[feat] = 0.0  # Add missing features with default values
+                    
+            if extra_features:
+                print(f"Removing {len(extra_features)} extra features")
+                feature_df = feature_df.drop(columns=list(extra_features))
+                
+            # Ensure column order matches what the scaler expects
+            feature_df = feature_df[feature_names]
             
             # Scale features
-            X_scaled = scaler.transform(df)
+            X_scaled = scaler.transform(feature_df)
             
             # Make prediction with memory efficiency
             with tf.device('/CPU:0'):  # Force CPU to avoid GPU memory issues
@@ -113,7 +141,9 @@ def predict():
                 "confidence": round(float(confidence), 4),
                 "error_value": float(error),
                 "threshold": float(threshold),
-                "features": {k: round(float(v), 3) for k, v in features.items()}
+                "features_count": len(feature_names),
+                "sample_rate_original": sr,
+                "sample_rate_used": TARGET_SAMPLE_RATE
             })
             
         except Exception as e:
