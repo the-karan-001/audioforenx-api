@@ -6,7 +6,7 @@ import warnings
 # Disable Numba JIT to avoid compilation issues
 os.environ['NUMBA_DISABLE_JIT'] = '1'
 
-TARGET_SR = 16000  # Reduced from 22050 to save memory
+TARGET_SR = 22050  # Reduced from 22050 to save memory
 DURATION = 3
 
 def load_audio(file_path, duration=DURATION, offset=0.0):
