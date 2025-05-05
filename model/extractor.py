@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 # Audio parameters
 DEFAULT_SR = 16000  # Reduced for memory efficiency
-DURATION = 2        # Reduced to 2 seconds
-N_FFT = 512        # Reduced for faster computation
-N_MELS = 32        # Reduced to lower memory usage
+DURATION = 3
+N_FFT = 1024  # Reduced for faster computation
+N_MELS = 40   # Matches model.py
 
 def load_audio(file_path, duration=DURATION, offset=0.0):
     """Load audio file with memory optimization."""
@@ -24,6 +24,7 @@ def load_audio(file_path, duration=DURATION, offset=0.0):
             warnings.simplefilter("ignore")
             y, sr = librosa.load(file_path, sr=DEFAULT_SR, mono=True,
                                duration=duration, offset=offset)
+            y, _ = librosa.effects.trim(y, top_db=20)
             y = librosa.util.fix_length(y, size=int(DEFAULT_SR * duration))
         return y, sr
     except Exception as e:
@@ -110,9 +111,9 @@ def extract_features(y, sr=DEFAULT_SR):
             'energy_diff_std': energy_diff_std,
             'pause_ratio': pause_ratio,
             
-            # Mel spectrogram (32 bands instead of 40, padded with zeros if needed)
-            **{f'mel_mean_{i}': mel_mean[i] if i < len(mel_mean) else 0.0 for i in range(40)},
-            **{f'mel_std_{i}': mel_std[i] if i < len(mel_std) else 0.0 for i in range(40)},
+            # Mel spectrogram
+            **{f'mel_mean_{i}': val for i, val in enumerate(mel_mean)},
+            **{f'mel_std_{i}': val for i, val in enumerate(mel_std)},
             
             # Chroma
             **{f'chroma_{i}': np.mean(val) for i, val in enumerate(chroma)},
