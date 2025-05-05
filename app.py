@@ -108,6 +108,12 @@ def predict():
         if file.filename == '':
             return jsonify({"error": "No file selected"}), 400
             
+        # Validate file extension and size
+        if not file.filename.lower().endswith(('.mp3', '.wav')):
+            return jsonify({"error": "Unsupported file format. Use MP3 or WAV"}), 400
+        if file.content_length and file.content_length > 5 * 1024 * 1024:  # 5 MB limit
+            return jsonify({"error": "File too large. Max 5 MB"}), 400
+            
         filename = secure_filename(file.filename)
         path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(path)
@@ -122,9 +128,11 @@ def predict():
             logger.info("Extracting features")
             features = extract_features(y, sr=sr)
             
+            feature_extraction_failed = False
             if not features:
                 logger.warning("Feature extraction failed, using default features")
                 features = {name: 0.0 for name in feature_names}
+                feature_extraction_failed = True
             
             # Initialize DataFrame with all expected features
             feature_df = pd.DataFrame(0.0, index=[0], columns=feature_names)
@@ -160,7 +168,8 @@ def predict():
                 "features_count": len(feature_names),
                 "sample_rate_original": sr,
                 "sample_rate_used": DEFAULT_SR,
-                "features": {key: float(value) for key, value in features.items()}
+                "features": {key: float(value) for key, value in features.items()},
+                "warning": "Feature extraction failed, results may be unreliable" if feature_extraction_failed else None
             }
             
             logger.info("Prediction completed successfully")
