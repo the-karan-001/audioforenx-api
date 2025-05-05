@@ -11,3 +11,4 @@ errorlog = "-"
 worker_tmp_dir = "/tmp"
 preload_app = True
 limit_request_line = 4094
+worker_class = "sync"
