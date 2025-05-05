@@ -139,11 +139,15 @@ def predict():
             logger.info("Extracting features")
             features = extract_features(y, sr=sr)
             
-            feature_extraction_failed = False
-            if len(features) < 50:  # Arbitrary threshold for partial failure
+            feature_status = "success"
+            if len(features) < 50:
                 logger.warning("Feature extraction incomplete, using default features")
                 features = {name: features.get(name, 0.0) for name in feature_names}
-                feature_extraction_failed = True
+                feature_status = "partial"
+            elif len(features) < 100:
+                logger.warning("Feature extraction partial, some features missing")
+                features = {name: features.get(name, 0.0) for name in feature_names}
+                feature_status = "partial"
             
             feature_df = pd.DataFrame(0.0, index=[0], columns=feature_names)
             for feat, value in features.items():
@@ -152,9 +156,11 @@ def predict():
             
             feature_df = feature_df[feature_names]
             
+            logger.info(f"Memory usage before scaling: {psutil.Process().memory_info().rss / 1024**2:.2f} MB")
             logger.info("Scaling features")
             X_scaled = scaler.transform(feature_df)
             
+            logger.info(f"Memory usage before prediction: {psutil.Process().memory_info().rss / 1024**2:.2f} MB")
             logger.info("Making prediction")
             with tf.device('/CPU:0'):
                 reconstruction = model.predict(X_scaled, verbose=0, batch_size=1)
@@ -177,8 +183,8 @@ def predict():
                 "sample_rate_original": sr,
                 "sample_rate_used": DEFAULT_SR,
                 "features": {key: float(value) for key, value in features.items()},
-                "status": "partial" if feature_extraction_failed else "success",
-                "warning": "Feature extraction incomplete, results may be unreliable" if feature_extraction_failed else None
+                "status": feature_status,
+                "warning": "Feature extraction incomplete, results may be unreliable" if feature_status != "success" else None
             }
             
             logger.info("Prediction completed successfully")
