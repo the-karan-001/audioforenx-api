@@ -4,6 +4,7 @@ import librosa
 import warnings
 import logging
 import shutil
+import traceback
 
 # Disable Numba JIT and clear cache
 os.environ['NUMBA_DISABLE_JIT'] = '1'
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SR = 16000
 DURATION = 2
 N_FFT = 512
-N_MELS = 16
-HOP_LENGTH = 512
+N_MELS = 8
+HOP_LENGTH = 1024
 
 def load_audio(file_path, duration=DURATION, offset=0.0):
     """Load audio file with memory optimization."""
@@ -89,12 +90,10 @@ def extract_features(y, sr=DEFAULT_SR):
             f'mel_std_{i}': mel_std[i] if i < len(mel_std) else 0.0 for i in range(40)
         })
         
-        logger.info("Computing pitch")
-        pitches, _ = librosa.piptrack(y=y, sr=sr, fmin=50, fmax=2000, n_fft=N_FFT, hop_length=HOP_LENGTH)
-        valid_pitches = pitches[pitches > 0]
+        # Skip pitch to reduce computation
         features.update({
-            'pitch_mean': np.nanmean(valid_pitches) if valid_pitches.size > 0 else 0,
-            'pitch_std': np.nanstd(valid_pitches) if valid_pitches.size > 0 else 0,
+            'pitch_mean': 0.0,
+            'pitch_std': 0.0,
         })
         
         logger.info("Computing MFCC")
@@ -113,7 +112,7 @@ def extract_features(y, sr=DEFAULT_SR):
             f'mfcc_delta2_{i}': 0.0 for i in range(20)
         })
         
-        # Skip chroma and onset_strength to reduce computation
+        # Skip chroma and onset_strength
         features.update({
             f'chroma_{i}': 0.0 for i in range(12)
         })
@@ -130,15 +129,14 @@ def extract_features(y, sr=DEFAULT_SR):
         })
         
         logger.info("Computing pause ratio")
-        energy = rms[0]
+        energy = rms[0  # Corrected typo
         features.update({
             'pause_ratio': np.sum(energy < 0.02) / len(energy),
         })
         
         logger.info("Cleaning up memory")
         del S, rms, zcr, spectral_centroid, spectral_bandwidth, mel_spec, log_mel
-        del mel_mean, mel_std, pitches, valid_pitches, mfccs, mfcc_delta
-        del energy_mean, energy_diff
+        del mel_mean, mel_std, mfccs, mfcc_delta, energy_mean, energy_diff
         gc.collect()
         
         logger.info(f"Extracted {len(features)} features")
