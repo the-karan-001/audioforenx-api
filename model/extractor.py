@@ -129,7 +129,7 @@ def extract_features(y, sr=DEFAULT_SR):
         })
         
         logger.info("Computing pause ratio")
-        energy = rms[0  # Corrected typo
+        energy = rms[0]  # Corrected typo
         features.update({
             'pause_ratio': np.sum(energy < 0.02) / len(energy),
         })
